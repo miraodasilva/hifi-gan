@@ -9,7 +9,7 @@
     "seed": 1234,
     "upsample_rates": [
         8,
-        8,
+        5,
         2,
         2
     ],
@@ -42,11 +42,11 @@
             5
         ]
     ],
-    "segment_size": 8192,
+    "segment_size": 8000,
     "num_mels": 80,
     "num_freq": 1025,
     "n_fft": 1024,
-    "hop_size": 256,
+    "hop_size": 160,
     "win_size": 1024,
     "sampling_rate": 16000,
     "fmin": 0,
