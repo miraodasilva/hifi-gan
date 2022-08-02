@@ -9,6 +9,7 @@ from scipy.io.wavfile import write
 from env import AttrDict
 from meldataset import mel_spectrogram, MAX_WAV_VALUE, load_wav
 from models import Generator
+import librosa
 
 h = None
 device = None
@@ -27,10 +28,10 @@ def get_mel(x):
 
 
 def scan_checkpoint(cp_dir, prefix):
-    pattern = os.path.join(cp_dir, prefix + '*')
+    pattern = os.path.join(cp_dir, prefix + "*")
     cp_list = glob.glob(pattern)
     if len(cp_list) == 0:
-        return ''
+        return ""
     return sorted(cp_list)[-1]
 
 
@@ -38,9 +39,14 @@ def inference(a):
     generator = Generator(h).to(device)
 
     state_dict_g = load_checkpoint(a.checkpoint_file, device)
-    generator.load_state_dict(state_dict_g['generator'])
+    generator.load_state_dict(state_dict_g["generator"])
 
-    filelist = os.listdir(a.input_wavs_dir)
+    filelist = [
+        os.path.join(d, f).replace(a.input_wavs_dir, "").lstrip("/")
+        for d, _, files in os.walk(a.input_wavs_dir)
+        for f in files
+        if f.endswith(".wav")
+    ]
 
     os.makedirs(a.output_dir, exist_ok=True)
 
@@ -50,28 +56,31 @@ def inference(a):
         for i, filname in enumerate(filelist):
             wav, sr = load_wav(os.path.join(a.input_wavs_dir, filname))
             wav = wav / MAX_WAV_VALUE
+            if sr != h.sampling_rate:
+                wav = librosa.resample(wav, orig_sr=sr, target_sr=h.sampling_rate)
             wav = torch.FloatTensor(wav).to(device)
             x = get_mel(wav.unsqueeze(0))
             y_g_hat = generator(x)
             audio = y_g_hat.squeeze()
             audio = audio * MAX_WAV_VALUE
-            audio = audio.cpu().numpy().astype('int16')
+            audio = audio.cpu().numpy().astype("int16")
 
-            output_file = os.path.join(a.output_dir, os.path.splitext(filname)[0] + '_generated.wav')
+            output_file = os.path.join(a.output_dir, os.path.splitext(filname)[0] + "_generated.wav")
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
             write(output_file, h.sampling_rate, audio)
             print(output_file)
 
 
 def main():
-    print('Initializing Inference Process..')
+    print("Initializing Inference Process..")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_wavs_dir', default='test_files')
-    parser.add_argument('--output_dir', default='generated_files')
-    parser.add_argument('--checkpoint_file', required=True)
+    parser.add_argument("--input_wavs_dir", default="test_files")
+    parser.add_argument("--output_dir", default="generated_files")
+    parser.add_argument("--checkpoint_file", required=True)
     a = parser.parse_args()
 
-    config_file = os.path.join(os.path.split(a.checkpoint_file)[0], 'config.json')
+    config_file = os.path.join(os.path.split(a.checkpoint_file)[0], "config.json")
     with open(config_file) as f:
         data = f.read()
 
@@ -83,13 +92,13 @@ def main():
     global device
     if torch.cuda.is_available():
         torch.cuda.manual_seed(h.seed)
-        device = torch.device('cuda')
+        device = torch.device("cuda")
     else:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
 
     inference(a)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
